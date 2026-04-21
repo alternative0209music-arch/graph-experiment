@@ -69,7 +69,7 @@
             const total = values.reduce((a, b) => a + b, 0);
             let currentAngle = -90;
             const outerR = size/2 - 5;
-            const innerR = outerR * 0.5;
+            const innerR = outerR * 0.6;
             let svg = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">`;
             values.forEach((value, index) => {
                 const sweepAngle = (value / total) * 360;
