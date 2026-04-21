@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>グラフ知覚実験</title>
+    <script src="https://unpkg.com/jspsych@7.3.4"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1.1.3"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-instructions@1.1.4"></script>
+    <link href="https://unpkg.com/jspsych@7.3.4/css/jspsych.css" rel="stylesheet">
+    
+    <style>
+        body {
+            background-color: #f5f5f5;
+        }
+        .chart-container {
+            background-color: #ffffff;
+            padding: 40px;
+            display: inline-block;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .color-legend {
+            margin-top: 30px;
+            font-size: 24px;
+            color: #333333;
+            font-weight: bold;
+        }
+        .instructions {
+            max-width: 800px;
+            margin: 0 auto;
+            text-align: left;
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 8px;
+        }
+        #jspsych-content {
+            color: #333333;
+        }
+        h2 { color: #2c3e50; }
+        .result-summary {
+            background-color: #ffffff;
+            color: #333333;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <script>
+        // グラフ描画関数
+        function createPieChart(values, colors, size = 400) {
+            const total = values.reduce((a, b) => a + b, 0);
+            let currentAngle = -90;
+            let svg = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">`;
+            values.forEach((value, index) => {
+                const sweepAngle = (value / total) * 360;
+                const path = createSlice(size/2, size/2, size/2 - 5, currentAngle, sweepAngle);
+                svg += `<path d="${path}" fill="${colors[index]}" stroke="white" stroke-width="2"/>`;
+                currentAngle += sweepAngle;
+            });
+            svg += '</svg>';
+            return svg;
+        }
+        
+        function createDonutChart(values, colors, size = 400) {
+            const total = values.reduce((a, b) => a + b, 0);
+            let currentAngle = -90;
+            const outerR = size/2 - 5;
+            const innerR = outerR * 0.5;
+            let svg = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">`;
+            values.forEach((value, index) => {
+                const sweepAngle = (value / total) * 360;
+                const path = createDonutSlice(size/2, size/2, outerR, innerR, currentAngle, sweepAngle);
+                svg += `<path d="${path}" fill="${colors[index]}" stroke="white" stroke-width="2"/>`;
+                currentAngle += sweepAngle;
+            });
+            svg += '</svg>';
+            return svg;
+        }
+        
+        function createBarChart(values, colors, width = 600, height = 400) {
+            const barWidth = 60;
+            const gap = 20;
+            const maxValue = Math.max(...values);
+            const padding = 50;
+            let svg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`;
+            values.forEach((value, index) => {
+                const barHeight = (value / maxValue) * (height - padding * 2);
+                const x = padding + index * (barWidth + gap);
+                const y = height - padding - barHeight;
+                svg += `<rect x="${x}" y="${y}" width="${barWidth}" height="${barHeight}" 
+                        fill="${colors[index]}" stroke="white" stroke-width="2"/>`;
+            });
+            svg += '</svg>';
+            return svg;
+        }
+        
+        function createSlice(cx, cy, r, startAngle, sweepAngle) {
+            const start = polarToCartesian(cx, cy, r, startAngle);
+            const end = polarToCartesian(cx, cy, r, startAngle + sweepAngle);
+            const largeArc = sweepAngle > 180 ? 1 : 0;
+            return ['M', cx, cy, 'L', start.x, start.y, 'A', r, r, 0, largeArc, 1, end.x, end.y, 'Z'].join(' ');
+        }
+        
+        function createDonutSlice(cx, cy, outerR, innerR, startAngle, sweepAngle) {
+            const outerStart = polarToCartesian(cx, cy, outerR, startAngle);
+            const outerEnd = polarToCartesian(cx, cy, outerR, startAngle + sweepAngle);
+            const innerStart = polarToCartesian(cx, cy, innerR, startAngle);
+            const innerEnd = polarToCartesian(cx, cy, innerR, startAngle + sweepAngle);
+            const largeArc = sweepAngle > 180 ? 1 : 0;
+            return ['M', outerStart.x, outerStart.y, 'A', outerR, outerR, 0, largeArc, 1, outerEnd.x, outerEnd.y,
+                    'L', innerEnd.x, innerEnd.y, 'A', innerR, innerR, 0, largeArc, 0, innerStart.x, innerStart.y, 'Z'].join(' ');
+        }
+        
+        function polarToCartesian(cx, cy, r, angle) {
+            const rad = (angle - 90) * Math.PI / 180;
+            return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+        }
+        
+        // 30試行のデータ定義（要素数4、単純比較15 + 合成比較15）
+        const BLUE = '#4A90E2', RED = '#E74C3C', GRAY = '#CCCCCC';
+        
+
+    // 基本データセット（10セット）
+    // BLUE:z, RED:/ 
+    const baseDataSets = [
+        // 単純比較（10セット）
+        { values: [30, 25, 20, 25], colors: [BLUE, RED, GRAY, GRAY], task: 'simple', answer: 'z' }, //5
+        { values: [20, 27, 31, 22], colors: [GRAY, RED, GRAY, BLUE], task: 'simple', answer: '/' }, //5
+        { values: [35, 30, 10, 25], colors: [BLUE, GRAY, GRAY, RED], task: 'simple', answer: 'z' }, //10
+        { values: [25, 35, 20, 20], colors: [RED, BLUE, GRAY, GRAY], task: 'simple', answer: '/' }, //10
+        { values: [37, 28, 25, 10], colors: [GRAY, GRAY, BLUE, RED], task: 'simple', answer: 'z' }, //15
+        { values: [20, 25, 20, 35], colors: [RED, GRAY, GRAY, BLUE], task: 'simple', answer: 'z' }, //15
+        { values: [20, 40, 20, 20], colors: [GRAY, RED, BLUE, GRAY], task: 'simple', answer: '/' }, //20
+        { values: [30, 30, 17, 23], colors: [GRAY, BLUE, GRAY, RED], task: 'simple', answer: 'z' }, //7
+        { values: [20, 25, 28, 27], colors: [BLUE, GRAY, RED, GRAY], task: 'simple', answer: '/' }, //8
+        { values: [47, 28, 15, 10], colors: [GRAY, GRAY, RED, BLUE], task: 'simple', answer: 'z' }, //5
+    
+        // 合成比較（5セット）
+        { values: [30, 20, 27, 22], colors: [BLUE, RED, RED, BLUE], task: 'complex', answer: 'z' }, //4
+        { values: [22, 18, 25, 35], colors: [BLUE, RED, BLUE, RED], task: 'complex', answer: '/' }, //6
+        { values: [28, 25, 30, 17], colors: [RED, BLUE, BLUE, RED], task: 'complex', answer: 'z' }, //10
+        { values: [15, 30, 20, 35], colors: [BLUE, BLUE, RED, RED], task: 'complex', answer: '/' }, //10
+        { values: [28, 32, 15, 25], colors: [RED, BLUE, RED, BLUE], task: 'complex', answer: 'z' }, //14
+        { values: [30, 25, 20, 25], colors: [BLUE, RED, BLUE, RED], task: 'complex', answer: 'z' }, //16
+        { values: [28, 14, 38, 20], colors: [BLUE, BLUE, RED, RED], task: 'complex', answer: '/' }, //20
+        { values: [21, 19, 28, 32], colors: [RED, RED, BLUE, BLUE], task: 'complex', answer: 'z' }, //8
+        { values: [27, 33, 27, 13], colors: [RED, BLUE, RED, BLUE], task: 'complex', answer: '/' }, //8
+        { values: [22, 24, 20, 34], colors: [BLUE, BLUE, RED, RED], task: 'complex', answer: '/' } //6
+    ];
+
+    // 3種類のグラフで同じデータを使用（30試行）
+    const trialsData = [];
+    baseDataSets.forEach(baseData => {
+        // 円グラフ
+        trialsData.push({
+            display: 'pie',
+            task: baseData.task,
+            values: baseData.values,
+            colors: baseData.colors,
+            answer: baseData.answer
+        });
+        
+        // ドーナツグラフ
+        trialsData.push({
+            display: 'donut',
+            task: baseData.task,
+            values: baseData.values,
+            colors: baseData.colors,
+            answer: baseData.answer
+        });
+        
+        // 棒グラフ
+        trialsData.push({
+            display: 'bar',
+            task: baseData.task,
+            values: baseData.values,
+            colors: baseData.colors,
+            answer: baseData.answer
+        });
+    });
+        
+        function shuffle(arr) {
+            const a = [...arr];
+            for (let i = a.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [a[i], a[j]] = [a[j], a[i]];
+            }
+            return a;
+        }
+        
+        function createTrial(data) {
+            return {
+                type: jsPsychHtmlKeyboardResponse,
+                stimulus: function() {
+                    let chart;
+                    if (data.display === 'pie') chart = createPieChart(data.values, data.colors);
+                    else if (data.display === 'donut') chart = createDonutChart(data.values, data.colors);
+                    else chart = createBarChart(data.values, data.colors);
+                    
+                    return `<div class="chart-container">${chart}
+                        <div class="color-legend">
+                            <span style="color: #4A90E2;">■</span> 左 (Z)
+                            <span style="margin-left: 100px; color: #E74C3C;">■</span> 右 (/)
+                        </div></div>`;
+                },
+                choices: ['z', '/'],
+                trial_duration: 3000,
+                data: {
+                    task: 'comparison',
+                    display_type: data.display,
+                    task_type: data.task,
+                    correct_answer: data.answer
+                },
+                on_finish: (d) => {
+                    d.correct = d.response === d.correct_answer;
+                    d.too_slow = d.rt > 1500;
+                }
+            };
+        }
+        
+    const jsPsych = initJsPsych({
+        on_finish: () => {
+        const trials = jsPsych.data.get().filter({task: 'comparison'});
+        const acc = Math.round(trials.filter({correct: true}).count() / trials.count() * 100);
+        const pieAcc = Math.round(trials.filter({display_type: 'pie', correct: true}).count() / 
+            trials.filter({display_type: 'pie'}).count() * 100);
+        const donutAcc = Math.round(trials.filter({display_type: 'donut', correct: true}).count() / 
+            trials.filter({display_type: 'donut'}).count() * 100);
+        const barAcc = Math.round(trials.filter({display_type: 'bar', correct: true}).count() / 
+            trials.filter({display_type: 'bar'}).count() * 100);
+        
+        // 完了コード生成
+        const completionCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+        
+        // 参加者ID（タイムスタンプベース）
+        const participantID = 'P' + Date.now();
+        
+        // CSVデータ取得
+        //const csvData = jsPsych.data.get().csv();
+        
+        // Google Formsに自動送信
+        //sendDataToGoogleForm(completionCode, csvData, participantID);
+
+        sendDataToGoogleForm(completionCode, participantID);
+        
+        // 画面表示
+        document.querySelector('#jspsych-content').innerHTML = `
+            <div class="result-summary">
+                <h2>実験終了</h2>
+                <p>ご協力ありがとうございました。</p>
+                
+                <div id="saving-status" style="margin: 20px 0; padding: 15px; background-color: #fff3cd; border-radius: 8px;">
+                    <p style="margin: 0;">💾 データを保存中...</p>
+                </div>
+                
+                
+
+                <hr style="margin: 40px 0; border: none; border-top: 1px solid #ddd;">
+                
+                <h3 style="color: #666; font-size: 18px;">参考：あなたの成績</h3>
+                <p>全体正答率: ${acc}%</p>
+                <p style="font-size: 14px; color: #888;">
+                    円グラフ: ${pieAcc}% / ドーナツ: ${donutAcc}% / 棒グラフ: ${barAcc}%
+                </p>
+            </div>`;
+    }
+    });
+
+                /*
+
+                <h3>完了コード</h3>
+                <div style="background-color: #e8f4f8; padding: 30px; border-radius: 8px; margin: 30px 0; border: 2px solid #4A90E2;">
+                    <p style="font-size: 36px; font-weight: bold; letter-spacing: 5px; margin: 0; color: #2c3e50;">
+                        ${completionCode}
+                    </p>
+                </div>
+                
+                <p style="color: #666; font-size: 16px; margin-top: 20px;">
+                    ⬆ このコードをクラウドワークスの納品フォームにコピーして貼り付けてください
+                </p>
+                */
+
+    // Google Formsにデータを送信する関数
+// Google Formsにデータを送信する関数（修正版）
+function sendDataToGoogleForm(completionCode, csvData, participantID) {
+    const FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSfreoCXEA98KWsAtpQrCCqVHzQUIAsZUjhGPS84q-5fDLG2tQ/formResponse';
+    
+    const ENTRY_COMPLETION_CODE = 'entry.847474852';
+    const ENTRY_CSV_DATA = 'entry.626628023';
+    const ENTRY_PARTICIPANT_ID = 'entry.627069894';
+    
+    // CSVを圧縮：比較試行のみを抽出（stimulusを除外）
+    const trials = jsPsych.data.get().filter({task: 'comparison'});
+    //const compactData = trials.select(['rt', 'response', 'display_type', 'task_type', 'correct', 'too_slow']).csv();
+    let compactCSV = 'rt,response,display_type,task_type,correct,too_slow\n';
+    trials.values().forEach(trial => {
+        compactCSV += `${trial.rt},${trial.response},${trial.display_type},${trial.task_type},${trial.correct},${trial.too_slow}\n`;
+    });
+
+    const formData = new FormData();
+    formData.append(ENTRY_COMPLETION_CODE, completionCode);
+    formData.append(ENTRY_CSV_DATA, compactCSV);  // 圧縮版を送信
+    formData.append(ENTRY_PARTICIPANT_ID, participantID);
+    
+    fetch(FORM_URL, {
+        method: 'POST',
+        body: formData,
+        mode: 'no-cors'
+    })
+    .then(() => {
+        const statusDiv = document.getElementById('saving-status');
+        if (statusDiv) {
+            statusDiv.style.backgroundColor = '#d4edda';
+            statusDiv.innerHTML = '<p style="margin: 0; color: #155724;">✅ データが正常に保存されました</p>';
+        }
+        console.log('送信成功');
+    })
+    .catch((error) => {
+        const statusDiv = document.getElementById('saving-status');
+        if (statusDiv) {
+            statusDiv.style.backgroundColor = '#f8d7da';
+            statusDiv.innerHTML = '<p style="margin: 0; color: #721c24;">⚠️ データ保存に失敗しました。完了コードをスクリーンショットで保存してください。</p>';
+        }
+        console.error('Error:', error);
+    });
+    
+    // バックアップ：ブラウザでダウンロード
+    //downloadCSV(csvData, participantID);
+}
+
+// CSVダウンロード関数を追加
+/*
+function downloadCSV(csvData, participantID) {
+    const blob = new Blob([csvData], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `experiment_${participantID}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+*/
+        /* <button onclick="jsPsych.data.displayData()" style="padding:10px 20px;">データ表示</button> */
+        
+        const timeline = [];
+        
+        timeline.push({
+            type: jsPsychInstructions,
+            pages: [
+                '<div class="instructions"><h2>グラフ知覚実験</h2></div>',
+                '<div class="instructions"><h2>課題</h2><p><span style="color:#4A90E2;font-weight:bold">青</span>と<span style="color:#E74C3C;font-weight:bold">赤</span>、どちらの合計が大きいか判断してください。</p></div>',
+                '<div class="instructions"><h2>回答方法</h2><p>青が大きい → <b>Zキー</b></p><p>赤が大きい → <b>/キー</b></p><p>グラフは3秒表示されます。</p></div>',
+                '<div class="instructions"><h2>練習問題を3問行います。</p></div>'
+            ],
+            show_clickable_nav: true,
+            button_label_next: '次へ',
+            button_label_previous: '戻る'
+        });
+        
+        // 練習3試行
+        trialsData.slice(0, 3).forEach(t => timeline.push(createTrial(t)));
+        
+        timeline.push({
+            type: jsPsychHtmlKeyboardResponse,
+            stimulus: '<h2>練習終了</h2><p>本番を開始します（何かキーを押す）</p>'
+        });
+        
+        // 本試行30個
+        shuffle(trialsData).forEach((t, i) => {
+            if (i > 0 && i % 20 === 0) {
+                timeline.push({
+                    type: jsPsychHtmlKeyboardResponse,
+                    stimulus: `<h2>休憩</h2><p>進捗: ${i}/60</p><p>何かキーを押して続行</p>`
+                });
+            }
+            timeline.push(createTrial(t));
+        });
+        jsPsych.run(timeline);
+    </script>
+</body>
+</html>
